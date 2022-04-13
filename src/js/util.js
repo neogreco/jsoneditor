@@ -14,10 +14,14 @@ const YEAR_2000 = 946684800000
  * Parse JSON using the parser built-in in the browser.
  * On exception, the jsonString is validated and a detailed error is thrown.
  * @param {String} jsonString
+ * @param {function} reviver default: null
  * @return {JSON} json
  */
-export function parse (jsonString) {
+export function parse (jsonString, reviver= null) {
   try {
+    if (reviver)
+      return JSON.parse(jsonString,reviver)
+
     return JSON.parse(jsonString)
   } catch (err) {
     // try to throw a more detailed error message using validate
@@ -72,7 +76,7 @@ export function validate (jsonString) {
   if (typeof (jsonlint) !== 'undefined') {
     jsonlint.parse(jsonString)
   } else {
-    JSON.parse(jsonString)
+    JSON.parse(jsonStringf)
   }
 }
 

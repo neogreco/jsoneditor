@@ -9,6 +9,7 @@ const { clear, extend, getInnerText, getInternetExplorerVersion, parse } = requi
 const { tryRequireAjv } = require('./tryRequireAjv')
 const { showTransformModal } = require('./showTransformModal')
 const { showSortModal } = require('./showSortModal')
+const {parseBigIntReviver} = require("./jsonUtils");
 
 const Ajv = tryRequireAjv()
 
@@ -187,7 +188,8 @@ JSONEditor.VALID_OPTIONS = [
   'sortObjectKeys', 'navigationBar', 'statusBar', 'mainMenuBar', 'languages', 'language', 'enableSort', 'enableTransform', 'limitDragging',
   'maxVisibleChilds', 'onValidationError',
   'modalAnchor', 'popupAnchor',
-  'createQuery', 'executeQuery', 'queryDescription'
+  'createQuery', 'executeQuery', 'queryDescription',
+  'bigint','forced_types'
 ]
 
 /**
@@ -232,7 +234,36 @@ JSONEditor.prototype.get = function () {
  * @param {String | undefined} jsonText
  */
 JSONEditor.prototype.setText = function (jsonText) {
-  this.json = parse(jsonText)
+  if (!this.options.bigint && !this.options.forced_types)
+    this.json = parse(jsonText)
+  else {
+    if (this.options.bigint && !this.options.forced_types) {
+      this.json = parse(jsonText, parseBigIntReviver)
+    } else {
+      var self = this;
+      this.json = parse(jsonText, function (key, value) {
+        let forcedType = self.options.forced_types.key;
+        if (forcedType) {
+          try {
+            switch (forcedType) {
+              case 'string':
+                return String(value)
+              case 'number':
+                return Number(value)
+              case 'boolean':
+                return Boolean(value)
+              case 'date':
+                return Date(value)
+              default:
+                return value
+            }
+          } catch (e) {
+            return value
+          }
+        }
+      })
+    }
+  }
 }
 
 /**

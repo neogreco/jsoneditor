@@ -195,3 +195,26 @@ export function containsArray (jsonText) {
 function hasOwnProperty (object, key) {
   return Object.prototype.hasOwnProperty.call(object, key)
 }
+
+/**
+ * Parse Reviver for Bignints numbers support
+ * @param key {string}
+ * @param value {string}
+ * @returns {bigint|*}
+ */
+export function parseBigIntReviver(key, value) {
+  if (typeof value === 'string' && /^\d+n$/.test(value)) {
+    return BigInt(value.slice(0, -1))
+  }
+  try{
+  let bigInt = BigInt(value)
+    if (bigInt < Number.MAX_SAFE_INTEGER){
+      return Number.parseInt(value);
+    }else{
+      return bigInt;
+    }
+  }catch(e){
+    console.log(value +" isnt a big int number" )
+  }
+  return value
+}

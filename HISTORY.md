@@ -2,6 +2,10 @@
 
 https://github.com/josdejong/jsoneditor
 
+## 2022-04-14, version 9.7.5
+
+- Fix #231: Added support for bigint parse and custom parsing within a option.
+
 
 ## 2022-03-15, version 9.7.4
 
