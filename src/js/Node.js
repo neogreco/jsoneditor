@@ -98,7 +98,7 @@ export class Node {
         const getValue = this.getValue.bind(this)
         const editable = this.editor.options.onEditable({
           field: this.field,
-          get value() {
+          get value () {
             return getValue()
           },
           path: this.getPath()
@@ -951,7 +951,7 @@ export class Node {
       const addClasses = this.editor.options.onClassName({
         path: this.getPath(),
         field: this.field,
-        get value() {
+        get value () {
           return getValue()
         }
       }) || ''
@@ -4099,7 +4099,7 @@ export class Node {
             path: this.getPath(),
             size: count,
             type: this.type,
-            get value() {
+            get value () {
               return getValue()
             }
           })

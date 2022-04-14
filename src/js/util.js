@@ -17,10 +17,9 @@ const YEAR_2000 = 946684800000
  * @param {function} reviver default: null
  * @return {JSON} json
  */
-export function parse (jsonString, reviver= null) {
+export function parse (jsonString, reviver = null) {
   try {
-    if (reviver)
-      return JSON.parse(jsonString,reviver)
+    if (reviver) { return JSON.parse(jsonString, reviver) }
 
     return JSON.parse(jsonString)
   } catch (err) {
@@ -449,7 +448,7 @@ export function getInnerText (element, buffer) {
 
 // regular expression matching one or multiple return characters with all their
 // enclosing white spaces
-export function removeReturnsAndSurroundingWhitespace(text) {
+export function removeReturnsAndSurroundingWhitespace (text) {
   return text.replace(/(\b|^)\s*(\b|$)/g, (match) => {
     return /\n/.exec(match) ? '' : match
   })

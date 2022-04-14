@@ -202,19 +202,19 @@ function hasOwnProperty (object, key) {
  * @param value {string}
  * @returns {bigint|*}
  */
-export function parseBigIntReviver(key, value) {
+export function parseBigIntReviver (key, value) {
   if (typeof value === 'string' && /^\d+n$/.test(value)) {
     return BigInt(value.slice(0, -1))
   }
-  try{
-  let bigInt = BigInt(value)
-    if (bigInt < Number.MAX_SAFE_INTEGER){
-      return Number.parseInt(value);
-    }else{
-      return bigInt;
+  try {
+    const bigInt = BigInt(value)
+    if (bigInt < Number.MAX_SAFE_INTEGER) {
+      return Number.parseInt(value)
+    } else {
+      return bigInt
     }
-  }catch(e){
-    console.log(value +" isnt a big int number" )
+  } catch (e) {
+    console.log(value + ' isnt a big int number')
   }
   return value
 }
