@@ -8,9 +8,11 @@ var jsonlint = require('./assets/jsonlint/jsonlint');
  * @param {String} jsonString
  * @return {JSON} json
  */
-exports.parse = function parse(jsonString) {
+exports.parse = function parse (jsonString, reviver= null) {
   try {
-    return JSON.parse(jsonString);
+    if (reviver)
+      return JSON.parse(jsonString,reviver);
+    return JSON.parse(jsonString)
   }
   catch (err) {
     // try to throw a more detailed error message using validate

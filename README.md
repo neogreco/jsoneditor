@@ -153,3 +153,16 @@ To minify the generated bundle, use [uglifyjs](https://github.com/mishoo/UglifyJ
 
     uglifyjs ./jsoneditor.custom.js -o ./jsoneditor.custom.min.js -m -c
 
+## New options
+
+Added two main options to the jsoneditor
+
+    bigint : boolean (default:false)
+
+As default as false, works as usual jsoneditor. As true modifies the parser behavior to forse a check and parse string numbers to bigintegers.
+
+    forced_types : object (default:undefined)
+
+With forced_types you can specify the type used to parse any key / value of the json.
+This way you can maintain, for example ids represented as numbers, others as string or bigint.
+Allowing you can configure frontend/client requirements, within also the backend properties setup.

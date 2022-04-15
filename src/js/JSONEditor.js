@@ -82,7 +82,8 @@ function JSONEditor (container, options, json) {
         'ace', 'theme',
         'ajv', 'schema',
         'onChange', 'onEditable', 'onError', 'onModeChange',
-        'escapeUnicode', 'history', 'search', 'mode', 'modes', 'name', 'indentation', 'sortObjectKeys'
+        'escapeUnicode', 'history', 'search', 'mode', 'modes', 'name', 'indentation', 'sortObjectKeys',
+        'bigint','forced_types'
       ];
 
       Object.keys(options).forEach(function (option) {
@@ -156,11 +157,63 @@ JSONEditor.prototype.get = function () {
 };
 
 /**
+ * Parse Reviver for Bignints numbers support
+ * @param key {string}
+ * @param value {string}
+ * @returns {bigint|*}
+ */
+function parseBigIntReviver(key, value) {
+  if (typeof value === 'string' && /^\d+n$/.test(value)) {
+    return BigInt(value.slice(0, -1));
+  }
+  try{
+    let bigInt = BigInt(value);
+    if (bigInt < Number.MAX_SAFE_INTEGER){
+      return Number.parseInt(value);
+    }else{
+      return bigInt;
+    }
+  }catch(e){
+    console.log(value +" isnt a big int number" );
+  }
+  return value;
+}
+
+/**
  * Set string containing JSON for the editor
  * @param {String | undefined} jsonText
  */
 JSONEditor.prototype.setText = function (jsonText) {
-  this.json = util.parse(jsonText);
+  if (!this.options.bigint && !this.options.forced_types)
+    this.json = parse(jsonText);
+  else {
+    if (this.options.bigint && !this.options.forced_types) {
+      this.json = parse(jsonText, parseBigIntReviver);
+    } else {
+      var self = this;
+      this.json = parse(jsonText, function (key, value) {
+        let forcedType = self.options.forced_types.key;
+        if (forcedType) {
+          try {
+            switch (forcedType) {
+              case 'string':
+                return String(value);
+              case 'number':
+                return Number(value);
+              case 'boolean':
+                return Boolean(value);
+              case 'date':
+                return Date(value);
+              default:
+                return value;
+            }
+          } catch (e) {
+            return value;
+          }
+        }
+      })
+    }
+  }
 };
 
 /**
