@@ -24,8 +24,8 @@
  * Copyright (c) 2011-2016 Jos de Jong, http://jsoneditoronline.org
  *
  * @author  Jos de Jong, <wjosdejong@gmail.com>
- * @version 5.4.0
- * @date    2016-04-09
+ * @version 5.4.1
+ * @date    2022-04-21
  */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -167,7 +167,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        'ace', 'theme',
 	        'ajv', 'schema',
 	        'onChange', 'onEditable', 'onError', 'onModeChange',
-	        'escapeUnicode', 'history', 'search', 'mode', 'modes', 'name', 'indentation', 'sortObjectKeys'
+	        'escapeUnicode', 'history', 'search', 'mode', 'modes', 'name', 'indentation', 'sortObjectKeys',
+	        'bigint','forced_types'
 	      ];
 
 	      Object.keys(options).forEach(function (option) {
@@ -241,11 +242,63 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 	/**
+	 * Parse Reviver for Bignints numbers support
+	 * @param key {string}
+	 * @param value {string}
+	 * @returns {bigint|*}
+	 */
+	function parseBigIntReviver(key, value) {
+	  if (typeof value === 'string' && /^\d+n$/.test(value)) {
+	    return BigInt(value.slice(0, -1));
+	  }
+	  try{
+	    let bigInt = BigInt(value);
+	    if (bigInt < Number.MAX_SAFE_INTEGER){
+	      return Number.parseInt(value);
+	    }else{
+	      return bigInt;
+	    }
+	  }catch(e){
+	    console.log(value +" isnt a big int number" );
+	  }
+	  return value;
+	}
+
+	/**
 	 * Set string containing JSON for the editor
 	 * @param {String | undefined} jsonText
 	 */
 	JSONEditor.prototype.setText = function (jsonText) {
-	  this.json = util.parse(jsonText);
+	  if (!this.options.bigint && !this.options.forced_types)
+	    this.json = parse(jsonText);
+	  else {
+	    if (this.options.bigint && !this.options.forced_types) {
+	      this.json = parse(jsonText, parseBigIntReviver);
+	    } else {
+	      var self = this;
+	      this.json = parse(jsonText, function (key, value) {
+	        let forcedType = self.options.forced_types.key;
+	        if (forcedType) {
+	          try {
+	            switch (forcedType) {
+	              case 'string':
+	                return String(value);
+	              case 'number':
+	                return Number(value);
+	              case 'boolean':
+	                return Boolean(value);
+	              case 'date':
+	                return Date(value);
+	              default:
+	                return value;
+	            }
+	          } catch (e) {
+	            return value;
+	          }
+	        }
+	      })
+	    }
+	  }
 	};
 
 	/**
@@ -676,7 +729,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {String} jsonText
 	 */
 	treemode.setText = function(jsonText) {
-	  this.set(util.parse(jsonText));
+	  this.set(util.parseText(jsonText,this.options));
 	};
 
 	/**
@@ -2030,17 +2083,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {String} jsonString
 	 * @return {JSON} json
 	 */
-	exports.parse = function parse(jsonString) {
-	  try {
-	    return JSON.parse(jsonString);
-	  }
-	  catch (err) {
-	    // try to throw a more detailed error message using validate
-	    exports.validate(jsonString);
+	exports.parse = function parse(jsonString, reviver = null) {
+	    try {
+	        debugger;
+	        if (reviver)
+	            return JSON.parse(jsonString, reviver);
+	        return JSON.parse(jsonString)
+	    } catch (err) {
+	        // try to throw a more detailed error message using validate
+	        exports.validate(jsonString);
 
-	    // rethrow the original error
-	    throw err;
-	  }
+	        // rethrow the original error
+	        throw err;
+	    }
 	};
 
 	/**
@@ -2052,131 +2107,134 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @returns {string} json
 	 */
 	exports.sanitize = function (jsString) {
-	  // escape all single and double quotes inside strings
-	  var chars = [];
-	  var i = 0;
+	    // escape all single and double quotes inside strings
+	    var chars = [];
+	    var i = 0;
 
-	  //If JSON starts with a function (characters/digits/"_-"), remove this function.
-	  //This is useful for "stripping" JSONP objects to become JSON
-	  //For example: /* some comment */ function_12321321 ( [{"a":"b"}] ); => [{"a":"b"}]
-	  var match = jsString.match(/^\s*(\/\*(.|[\r\n])*?\*\/)?\s*[\da-zA-Z_$]+\s*\(([\s\S]*)\)\s*;?\s*$/);
-	  if (match) {
-	    jsString = match[3];
-	  }
-
-	  // helper functions to get the current/prev/next character
-	  function curr () { return jsString.charAt(i);     }
-	  function next()  { return jsString.charAt(i + 1); }
-	  function prev()  { return jsString.charAt(i - 1); }
-
-	  // get the last parsed non-whitespace character
-	  function lastNonWhitespace () {
-	    var p = chars.length - 1;
-
-	    while (p >= 0) {
-	      var pp = chars[p];
-	      if (pp !== ' ' && pp !== '\n' && pp !== '\r' && pp !== '\t') { // non whitespace
-	        return pp;
-	      }
-	      p--;
+	    //If JSON starts with a function (characters/digits/"_-"), remove this function.
+	    //This is useful for "stripping" JSONP objects to become JSON
+	    //For example: /* some comment */ function_12321321 ( [{"a":"b"}] ); => [{"a":"b"}]
+	    var match = jsString.match(/^\s*(\/\*(.|[\r\n])*?\*\/)?\s*[\da-zA-Z_$]+\s*\(([\s\S]*)\)\s*;?\s*$/);
+	    if (match) {
+	        jsString = match[3];
 	    }
 
-	    return '';
-	  }
-
-	  // skip a block comment '/* ... */'
-	  function skipBlockComment () {
-	    i += 2;
-	    while (i < jsString.length && (curr() !== '*' || next() !== '/')) {
-	      i++;
+	    // helper functions to get the current/prev/next character
+	    function curr() {
+	        return jsString.charAt(i);
 	    }
-	    i += 2;
-	  }
 
-	  // skip a comment '// ...'
-	  function skipComment () {
-	    i += 2;
-	    while (i < jsString.length && (curr() !== '\n')) {
-	      i++;
+	    function next() {
+	        return jsString.charAt(i + 1);
 	    }
-	  }
 
-	  // parse single or double quoted string
-	  function parseString(quote) {
-	    chars.push('"');
-	    i++;
-	    var c = curr();
-	    while (i < jsString.length && c !== quote) {
-	      if (c === '"' && prev() !== '\\') {
-	        // unescaped double quote, escape it
-	        chars.push('\\');
-	      }
+	    function prev() {
+	        return jsString.charAt(i - 1);
+	    }
 
-	      // handle escape character
-	      if (c === '\\') {
-	        i++;
-	        c = curr();
+	    // get the last parsed non-whitespace character
+	    function lastNonWhitespace() {
+	        var p = chars.length - 1;
 
-	        // remove the escape character when followed by a single quote ', not needed
-	        if (c !== '\'') {
-	          chars.push('\\');
+	        while (p >= 0) {
+	            var pp = chars[p];
+	            if (pp !== ' ' && pp !== '\n' && pp !== '\r' && pp !== '\t') { // non whitespace
+	                return pp;
+	            }
+	            p--;
 	        }
-	      }
-	      chars.push(c);
 
-	      i++;
-	      c = curr();
-	    }
-	    if (c === quote) {
-	      chars.push('"');
-	      i++;
-	    }
-	  }
-
-	  // parse an unquoted key
-	  function parseKey() {
-	    var specialValues = ['null', 'true', 'false'];
-	    var key = '';
-	    var c = curr();
-
-	    var regexp = /[a-zA-Z_$\d]/; // letter, number, underscore, dollar character
-	    while (regexp.test(c)) {
-	      key += c;
-	      i++;
-	      c = curr();
+	        return '';
 	    }
 
-	    if (specialValues.indexOf(key) === -1) {
-	      chars.push('"' + key + '"');
+	    // skip a block comment '/* ... */'
+	    function skipBlockComment() {
+	        i += 2;
+	        while (i < jsString.length && (curr() !== '*' || next() !== '/')) {
+	            i++;
+	        }
+	        i += 2;
 	    }
-	    else {
-	      chars.push(key);
-	    }
-	  }
 
-	  while(i < jsString.length) {
-	    var c = curr();
+	    // skip a comment '// ...'
+	    function skipComment() {
+	        i += 2;
+	        while (i < jsString.length && (curr() !== '\n')) {
+	            i++;
+	        }
+	    }
 
-	    if (c === '/' && next() === '*') {
-	      skipBlockComment();
-	    }
-	    else if (c === '/' && next() === '/') {
-	      skipComment();
-	    }
-	    else if (c === '\'' || c === '"') {
-	      parseString(c);
-	    }
-	    else if (/[a-zA-Z_$]/.test(c) && ['{', ','].indexOf(lastNonWhitespace()) !== -1) {
-	      // an unquoted object key (like a in '{a:2}')
-	      parseKey();
-	    }
-	    else {
-	      chars.push(c);
-	      i++;
-	    }
-	  }
+	    // parse single or double quoted string
+	    function parseString(quote) {
+	        chars.push('"');
+	        i++;
+	        var c = curr();
+	        while (i < jsString.length && c !== quote) {
+	            if (c === '"' && prev() !== '\\') {
+	                // unescaped double quote, escape it
+	                chars.push('\\');
+	            }
 
-	  return chars.join('');
+	            // handle escape character
+	            if (c === '\\') {
+	                i++;
+	                c = curr();
+
+	                // remove the escape character when followed by a single quote ', not needed
+	                if (c !== '\'') {
+	                    chars.push('\\');
+	                }
+	            }
+	            chars.push(c);
+
+	            i++;
+	            c = curr();
+	        }
+	        if (c === quote) {
+	            chars.push('"');
+	            i++;
+	        }
+	    }
+
+	    // parse an unquoted key
+	    function parseKey() {
+	        var specialValues = ['null', 'true', 'false'];
+	        var key = '';
+	        var c = curr();
+
+	        var regexp = /[a-zA-Z_$\d]/; // letter, number, underscore, dollar character
+	        while (regexp.test(c)) {
+	            key += c;
+	            i++;
+	            c = curr();
+	        }
+
+	        if (specialValues.indexOf(key) === -1) {
+	            chars.push('"' + key + '"');
+	        } else {
+	            chars.push(key);
+	        }
+	    }
+
+	    while (i < jsString.length) {
+	        var c = curr();
+
+	        if (c === '/' && next() === '*') {
+	            skipBlockComment();
+	        } else if (c === '/' && next() === '/') {
+	            skipComment();
+	        } else if (c === '\'' || c === '"') {
+	            parseString(c);
+	        } else if (/[a-zA-Z_$]/.test(c) && ['{', ','].indexOf(lastNonWhitespace()) !== -1) {
+	            // an unquoted object key (like a in '{a:2}')
+	            parseKey();
+	        } else {
+	            chars.push(c);
+	            i++;
+	        }
+	    }
+
+	    return chars.join('');
 	};
 
 	/**
@@ -2186,12 +2244,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {string}
 	 */
 	exports.escapeUnicodeChars = function (text) {
-	  // see https://www.wikiwand.com/en/UTF-16
-	  // note: we leave surrogate pairs as two individual chars,
-	  // as JSON doesn't interpret them as a single unicode char.
-	  return text.replace(/[\u007F-\uFFFF]/g, function(c) {
-	    return '\\u'+('0000' + c.charCodeAt(0).toString(16)).slice(-4);
-	  })
+	    // see https://www.wikiwand.com/en/UTF-16
+	    // note: we leave surrogate pairs as two individual chars,
+	    // as JSON doesn't interpret them as a single unicode char.
+	    return text.replace(/[\u007F-\uFFFF]/g, function (c) {
+	        return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
+	    })
 	};
 
 	/**
@@ -2202,12 +2260,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @throws Error
 	 */
 	exports.validate = function validate(jsonString) {
-	  if (typeof(jsonlint) != 'undefined') {
-	    jsonlint.parse(jsonString);
-	  }
-	  else {
-	    JSON.parse(jsonString);
-	  }
+	    if (typeof (jsonlint) != 'undefined') {
+	        jsonlint.parse(jsonString);
+	    } else {
+	        JSON.parse(jsonString);
+	    }
 	};
 
 	/**
@@ -2217,12 +2274,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {Object} a
 	 */
 	exports.extend = function extend(a, b) {
-	  for (var prop in b) {
-	    if (b.hasOwnProperty(prop)) {
-	      a[prop] = b[prop];
+	    for (var prop in b) {
+	        if (b.hasOwnProperty(prop)) {
+	            a[prop] = b[prop];
+	        }
 	    }
-	  }
-	  return a;
+	    return a;
 	};
 
 	/**
@@ -2230,13 +2287,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {Object} a
 	 * @return {Object} a
 	 */
-	exports.clear = function clear (a) {
-	  for (var prop in a) {
-	    if (a.hasOwnProperty(prop)) {
-	      delete a[prop];
+	exports.clear = function clear(a) {
+	    for (var prop in a) {
+	        if (a.hasOwnProperty(prop)) {
+	            delete a[prop];
+	        }
 	    }
-	  }
-	  return a;
+	    return a;
 	};
 
 	/**
@@ -2244,30 +2301,30 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {*} object
 	 * @return {String} type
 	 */
-	exports.type = function type (object) {
-	  if (object === null) {
-	    return 'null';
-	  }
-	  if (object === undefined) {
-	    return 'undefined';
-	  }
-	  if ((object instanceof Number) || (typeof object === 'number')) {
-	    return 'number';
-	  }
-	  if ((object instanceof String) || (typeof object === 'string')) {
-	    return 'string';
-	  }
-	  if ((object instanceof Boolean) || (typeof object === 'boolean')) {
-	    return 'boolean';
-	  }
-	  if ((object instanceof RegExp) || (typeof object === 'regexp')) {
-	    return 'regexp';
-	  }
-	  if (exports.isArray(object)) {
-	    return 'array';
-	  }
+	exports.type = function type(object) {
+	    if (object === null) {
+	        return 'null';
+	    }
+	    if (object === undefined) {
+	        return 'undefined';
+	    }
+	    if ((object instanceof Number) || (typeof object === 'number')) {
+	        return 'number';
+	    }
+	    if ((object instanceof String) || (typeof object === 'string')) {
+	        return 'string';
+	    }
+	    if ((object instanceof Boolean) || (typeof object === 'boolean')) {
+	        return 'boolean';
+	    }
+	    if ((object instanceof RegExp) || (typeof object === 'regexp')) {
+	        return 'regexp';
+	    }
+	    if (exports.isArray(object)) {
+	        return 'array';
+	    }
 
-	  return 'object';
+	    return 'object';
 	};
 
 	/**
@@ -2276,9 +2333,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {String} text
 	 */
 	var isUrlRegex = /^https?:\/\/\S+$/;
-	exports.isUrl = function isUrl (text) {
-	  return (typeof text == 'string' || text instanceof String) &&
-	      isUrlRegex.test(text);
+	exports.isUrl = function isUrl(text) {
+	    return (typeof text == 'string' || text instanceof String) &&
+	        isUrlRegex.test(text);
 	};
 
 	/**
@@ -2287,7 +2344,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @returns {boolean} returns true when obj is an array
 	 */
 	exports.isArray = function (obj) {
-	  return Object.prototype.toString.call(obj) === '[object Array]';
+	    return Object.prototype.toString.call(obj) === '[object Array]';
 	};
 
 	/**
@@ -2297,8 +2354,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	 *                          in the browser page.
 	 */
 	exports.getAbsoluteLeft = function getAbsoluteLeft(elem) {
-	  var rect = elem.getBoundingClientRect();
-	  return rect.left + window.pageXOffset || document.scrollLeft || 0;
+	    var rect = elem.getBoundingClientRect();
+	    return rect.left + window.pageXOffset || document.scrollLeft || 0;
 	};
 
 	/**
@@ -2308,8 +2365,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	 *                          in the browser page.
 	 */
 	exports.getAbsoluteTop = function getAbsoluteTop(elem) {
-	  var rect = elem.getBoundingClientRect();
-	  return rect.top + window.pageYOffset || document.scrollTop || 0;
+	    var rect = elem.getBoundingClientRect();
+	    return rect.top + window.pageYOffset || document.scrollTop || 0;
 	};
 
 	/**
@@ -2318,11 +2375,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {String} className
 	 */
 	exports.addClassName = function addClassName(elem, className) {
-	  var classes = elem.className.split(' ');
-	  if (classes.indexOf(className) == -1) {
-	    classes.push(className); // add the class to the array
-	    elem.className = classes.join(' ');
-	  }
+	    var classes = elem.className.split(' ');
+	    if (classes.indexOf(className) == -1) {
+	        classes.push(className); // add the class to the array
+	        elem.className = classes.join(' ');
+	    }
 	};
 
 	/**
@@ -2331,12 +2388,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {String} className
 	 */
 	exports.removeClassName = function removeClassName(elem, className) {
-	  var classes = elem.className.split(' ');
-	  var index = classes.indexOf(className);
-	  if (index != -1) {
-	    classes.splice(index, 1); // remove the class from the array
-	    elem.className = classes.join(' ');
-	  }
+	    var classes = elem.className.split(' ');
+	    var index = classes.indexOf(className);
+	    if (index != -1) {
+	        classes.splice(index, 1); // remove the class from the array
+	        elem.className = classes.join(' ');
+	    }
 	};
 
 	/**
@@ -2345,30 +2402,30 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {Element} divElement
 	 */
 	exports.stripFormatting = function stripFormatting(divElement) {
-	  var childs = divElement.childNodes;
-	  for (var i = 0, iMax = childs.length; i < iMax; i++) {
-	    var child = childs[i];
+	    var childs = divElement.childNodes;
+	    for (var i = 0, iMax = childs.length; i < iMax; i++) {
+	        var child = childs[i];
 
-	    // remove the style
-	    if (child.style) {
-	      // TODO: test if child.attributes does contain style
-	      child.removeAttribute('style');
-	    }
-
-	    // remove all attributes
-	    var attributes = child.attributes;
-	    if (attributes) {
-	      for (var j = attributes.length - 1; j >= 0; j--) {
-	        var attribute = attributes[j];
-	        if (attribute.specified === true) {
-	          child.removeAttribute(attribute.name);
+	        // remove the style
+	        if (child.style) {
+	            // TODO: test if child.attributes does contain style
+	            child.removeAttribute('style');
 	        }
-	      }
-	    }
 
-	    // recursively strip childs
-	    exports.stripFormatting(child);
-	  }
+	        // remove all attributes
+	        var attributes = child.attributes;
+	        if (attributes) {
+	            for (var j = attributes.length - 1; j >= 0; j--) {
+	                var attribute = attributes[j];
+	                if (attribute.specified === true) {
+	                    child.removeAttribute(attribute.name);
+	                }
+	            }
+	        }
+
+	        // recursively strip childs
+	        exports.stripFormatting(child);
+	    }
 	};
 
 	/**
@@ -2379,15 +2436,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {Element} contentEditableElement   A content editable div
 	 */
 	exports.setEndOfContentEditable = function setEndOfContentEditable(contentEditableElement) {
-	  var range, selection;
-	  if(document.createRange) {
-	    range = document.createRange();//Create a range (a range is a like the selection but invisible)
-	    range.selectNodeContents(contentEditableElement);//Select the entire contents of the element with the range
-	    range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
-	    selection = window.getSelection();//get the selection object (allows you to change selection)
-	    selection.removeAllRanges();//remove any selections already made
-	    selection.addRange(range);//make the range you have just created the visible selection
-	  }
+	    var range, selection;
+	    if (document.createRange) {
+	        range = document.createRange();//Create a range (a range is a like the selection but invisible)
+	        range.selectNodeContents(contentEditableElement);//Select the entire contents of the element with the range
+	        range.collapse(false);//collapse the range to the end point. false means collapse to end rather than the start
+	        selection = window.getSelection();//get the selection object (allows you to change selection)
+	        selection.removeAllRanges();//remove any selections already made
+	        selection.addRange(range);//make the range you have just created the visible selection
+	    }
 	};
 
 	/**
@@ -2396,18 +2453,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {Element} contentEditableElement   A content editable div
 	 */
 	exports.selectContentEditable = function selectContentEditable(contentEditableElement) {
-	  if (!contentEditableElement || contentEditableElement.nodeName != 'DIV') {
-	    return;
-	  }
+	    if (!contentEditableElement || contentEditableElement.nodeName != 'DIV') {
+	        return;
+	    }
 
-	  var sel, range;
-	  if (window.getSelection && document.createRange) {
-	    range = document.createRange();
-	    range.selectNodeContents(contentEditableElement);
-	    sel = window.getSelection();
-	    sel.removeAllRanges();
-	    sel.addRange(range);
-	  }
+	    var sel, range;
+	    if (window.getSelection && document.createRange) {
+	        range = document.createRange();
+	        range.selectNodeContents(contentEditableElement);
+	        sel = window.getSelection();
+	        sel.removeAllRanges();
+	        sel.addRange(range);
+	    }
 	};
 
 	/**
@@ -2416,13 +2473,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {Range | TextRange | null} range
 	 */
 	exports.getSelection = function getSelection() {
-	  if (window.getSelection) {
-	    var sel = window.getSelection();
-	    if (sel.getRangeAt && sel.rangeCount) {
-	      return sel.getRangeAt(0);
+	    if (window.getSelection) {
+	        var sel = window.getSelection();
+	        if (sel.getRangeAt && sel.rangeCount) {
+	            return sel.getRangeAt(0);
+	        }
 	    }
-	  }
-	  return null;
+	    return null;
 	};
 
 	/**
@@ -2431,13 +2488,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {Range | TextRange | null} range
 	 */
 	exports.setSelection = function setSelection(range) {
-	  if (range) {
-	    if (window.getSelection) {
-	      var sel = window.getSelection();
-	      sel.removeAllRanges();
-	      sel.addRange(range);
+	    if (range) {
+	        if (window.getSelection) {
+	            var sel = window.getSelection();
+	            sel.removeAllRanges();
+	            sel.addRange(range);
+	        }
 	    }
-	  }
 	};
 
 	/**
@@ -2450,18 +2507,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	 *                          Returns null if no text selection is found
 	 */
 	exports.getSelectionOffset = function getSelectionOffset() {
-	  var range = exports.getSelection();
+	    var range = exports.getSelection();
 
-	  if (range && 'startOffset' in range && 'endOffset' in range &&
-	      range.startContainer && (range.startContainer == range.endContainer)) {
-	    return {
-	      startOffset: range.startOffset,
-	      endOffset: range.endOffset,
-	      container: range.startContainer.parentNode
-	    };
-	  }
+	    if (range && 'startOffset' in range && 'endOffset' in range &&
+	        range.startContainer && (range.startContainer == range.endContainer)) {
+	        return {
+	            startOffset: range.startOffset,
+	            endOffset: range.endOffset,
+	            container: range.startContainer.parentNode
+	        };
+	    }
 
-	  return null;
+	    return null;
 	};
 
 	/**
@@ -2472,23 +2529,23 @@ return /******/ (function(modules) { // webpackBootstrap
 	 *                              {Number} endOffset
 	 */
 	exports.setSelectionOffset = function setSelectionOffset(params) {
-	  if (document.createRange && window.getSelection) {
-	    var selection = window.getSelection();
-	    if(selection) {
-	      var range = document.createRange();
+	    if (document.createRange && window.getSelection) {
+	        var selection = window.getSelection();
+	        if (selection) {
+	            var range = document.createRange();
 
-	      if (!params.container.firstChild) {
-	        params.container.appendChild(document.createTextNode(''));
-	      }
+	            if (!params.container.firstChild) {
+	                params.container.appendChild(document.createTextNode(''));
+	            }
 
-	      // TODO: do not suppose that the first child of the container is a textnode,
-	      //       but recursively find the textnodes
-	      range.setStart(params.container.firstChild, params.startOffset);
-	      range.setEnd(params.container.firstChild, params.endOffset);
+	            // TODO: do not suppose that the first child of the container is a textnode,
+	            //       but recursively find the textnodes
+	            range.setStart(params.container.firstChild, params.startOffset);
+	            range.setEnd(params.container.firstChild, params.endOffset);
 
-	      exports.setSelection(range);
+	            exports.setSelection(range);
+	        }
 	    }
-	  }
 	};
 
 	/**
@@ -2498,68 +2555,65 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {String} innerText
 	 */
 	exports.getInnerText = function getInnerText(element, buffer) {
-	  var first = (buffer == undefined);
-	  if (first) {
-	    buffer = {
-	      'text': '',
-	      'flush': function () {
-	        var text = this.text;
-	        this.text = '';
-	        return text;
-	      },
-	      'set': function (text) {
-	        this.text = text;
-	      }
-	    };
-	  }
+	    var first = (buffer == undefined);
+	    if (first) {
+	        buffer = {
+	            'text': '',
+	            'flush': function () {
+	                var text = this.text;
+	                this.text = '';
+	                return text;
+	            },
+	            'set': function (text) {
+	                this.text = text;
+	            }
+	        };
+	    }
 
-	  // text node
-	  if (element.nodeValue) {
-	    return buffer.flush() + element.nodeValue;
-	  }
+	    // text node
+	    if (element.nodeValue) {
+	        return buffer.flush() + element.nodeValue;
+	    }
 
-	  // divs or other HTML elements
-	  if (element.hasChildNodes()) {
-	    var childNodes = element.childNodes;
-	    var innerText = '';
+	    // divs or other HTML elements
+	    if (element.hasChildNodes()) {
+	        var childNodes = element.childNodes;
+	        var innerText = '';
 
-	    for (var i = 0, iMax = childNodes.length; i < iMax; i++) {
-	      var child = childNodes[i];
+	        for (var i = 0, iMax = childNodes.length; i < iMax; i++) {
+	            var child = childNodes[i];
 
-	      if (child.nodeName == 'DIV' || child.nodeName == 'P') {
-	        var prevChild = childNodes[i - 1];
-	        var prevName = prevChild ? prevChild.nodeName : undefined;
-	        if (prevName && prevName != 'DIV' && prevName != 'P' && prevName != 'BR') {
-	          innerText += '\n';
-	          buffer.flush();
+	            if (child.nodeName == 'DIV' || child.nodeName == 'P') {
+	                var prevChild = childNodes[i - 1];
+	                var prevName = prevChild ? prevChild.nodeName : undefined;
+	                if (prevName && prevName != 'DIV' && prevName != 'P' && prevName != 'BR') {
+	                    innerText += '\n';
+	                    buffer.flush();
+	                }
+	                innerText += exports.getInnerText(child, buffer);
+	                buffer.set('\n');
+	            } else if (child.nodeName == 'BR') {
+	                innerText += buffer.flush();
+	                buffer.set('\n');
+	            } else {
+	                innerText += exports.getInnerText(child, buffer);
+	            }
 	        }
-	        innerText += exports.getInnerText(child, buffer);
-	        buffer.set('\n');
-	      }
-	      else if (child.nodeName == 'BR') {
-	        innerText += buffer.flush();
-	        buffer.set('\n');
-	      }
-	      else {
-	        innerText += exports.getInnerText(child, buffer);
-	      }
+
+	        return innerText;
+	    } else {
+	        if (element.nodeName == 'P' && exports.getInternetExplorerVersion() != -1) {
+	            // On Internet Explorer, a <p> with hasChildNodes()==false is
+	            // rendered with a new line. Note that a <p> with
+	            // hasChildNodes()==true is rendered without a new line
+	            // Other browsers always ensure there is a <br> inside the <p>,
+	            // and if not, the <p> does not render a new line
+	            return buffer.flush();
+	        }
 	    }
 
-	    return innerText;
-	  }
-	  else {
-	    if (element.nodeName == 'P' && exports.getInternetExplorerVersion() != -1) {
-	      // On Internet Explorer, a <p> with hasChildNodes()==false is
-	      // rendered with a new line. Note that a <p> with
-	      // hasChildNodes()==true is rendered without a new line
-	      // Other browsers always ensure there is a <br> inside the <p>,
-	      // and if not, the <p> does not render a new line
-	      return buffer.flush();
-	    }
-	  }
-
-	  // br or unknown
-	  return '';
+	    // br or unknown
+	    return '';
 	};
 
 	/**
@@ -2569,29 +2623,28 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {Number} Internet Explorer version, or -1 in case of an other browser
 	 */
 	exports.getInternetExplorerVersion = function getInternetExplorerVersion() {
-	  if (_ieVersion == -1) {
-	    var rv = -1; // Return value assumes failure.
-	    if (navigator.appName == 'Microsoft Internet Explorer')
-	    {
-	      var ua = navigator.userAgent;
-	      var re  = new RegExp("MSIE ([0-9]{1,}[\.0-9]{0,})");
-	      if (re.exec(ua) != null) {
-	        rv = parseFloat( RegExp.$1 );
-	      }
+	    if (_ieVersion == -1) {
+	        var rv = -1; // Return value assumes failure.
+	        if (navigator.appName == 'Microsoft Internet Explorer') {
+	            var ua = navigator.userAgent;
+	            var re = new RegExp("MSIE ([0-9]{1,}[\.0-9]{0,})");
+	            if (re.exec(ua) != null) {
+	                rv = parseFloat(RegExp.$1);
+	            }
+	        }
+
+	        _ieVersion = rv;
 	    }
 
-	    _ieVersion = rv;
-	  }
-
-	  return _ieVersion;
+	    return _ieVersion;
 	};
 
 	/**
 	 * Test whether the current browser is Firefox
 	 * @returns {boolean} isFirefox
 	 */
-	exports.isFirefox = function isFirefox () {
-	  return (navigator.userAgent.indexOf("Firefox") != -1);
+	exports.isFirefox = function isFirefox() {
+	    return (navigator.userAgent.indexOf("Firefox") != -1);
 	};
 
 	/**
@@ -2611,24 +2664,24 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {function}   the created event listener
 	 */
 	exports.addEventListener = function addEventListener(element, action, listener, useCapture) {
-	  if (element.addEventListener) {
-	    if (useCapture === undefined)
-	      useCapture = false;
+	    if (element.addEventListener) {
+	        if (useCapture === undefined)
+	            useCapture = false;
 
-	    if (action === "mousewheel" && exports.isFirefox()) {
-	      action = "DOMMouseScroll";  // For Firefox
+	        if (action === "mousewheel" && exports.isFirefox()) {
+	            action = "DOMMouseScroll";  // For Firefox
+	        }
+
+	        element.addEventListener(action, listener, useCapture);
+	        return listener;
+	    } else if (element.attachEvent) {
+	        // Old IE browsers
+	        var f = function () {
+	            return listener.call(element, window.event);
+	        };
+	        element.attachEvent("on" + action, f);
+	        return f;
 	    }
-
-	    element.addEventListener(action, listener, useCapture);
-	    return listener;
-	  } else if (element.attachEvent) {
-	    // Old IE browsers
-	    var f = function () {
-	      return listener.call(element, window.event);
-	    };
-	    element.attachEvent("on" + action, f);
-	    return f;
-	  }
 	};
 
 	/**
@@ -2639,19 +2692,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {boolean}  [useCapture]   false by default
 	 */
 	exports.removeEventListener = function removeEventListener(element, action, listener, useCapture) {
-	  if (element.removeEventListener) {
-	    if (useCapture === undefined)
-	      useCapture = false;
+	    if (element.removeEventListener) {
+	        if (useCapture === undefined)
+	            useCapture = false;
 
-	    if (action === "mousewheel" && exports.isFirefox()) {
-	      action = "DOMMouseScroll";  // For Firefox
+	        if (action === "mousewheel" && exports.isFirefox()) {
+	            action = "DOMMouseScroll";  // For Firefox
+	        }
+
+	        element.removeEventListener(action, listener, useCapture);
+	    } else if (element.detachEvent) {
+	        // Old IE browsers
+	        element.detachEvent("on" + action, listener);
 	    }
-
-	    element.removeEventListener(action, listener, useCapture);
-	  } else if (element.detachEvent) {
-	    // Old IE browsers
-	    element.detachEvent("on" + action, listener);
-	  }
 	};
 
 	/**
@@ -2660,37 +2713,35 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {Array}
 	 */
 	exports.parsePath = function parsePath(jsonPath) {
-	  var prop, remainder;
+	    var prop, remainder;
 
-	  if (jsonPath.length === 0) {
-	    return [];
-	  }
-
-	  // find a match like '.prop'
-	  var match = jsonPath.match(/^\.(\w+)/);
-	  if (match) {
-	    prop = match[1];
-	    remainder = jsonPath.substr(prop.length + 1);
-	  }
-	  else if (jsonPath[0] === '[') {
-	    // find a match like
-	    var end = jsonPath.indexOf(']');
-	    if (end === -1) {
-	      throw new SyntaxError('Character ] expected in path');
-	    }
-	    if (end === 1) {
-	      throw new SyntaxError('Index expected after [');
+	    if (jsonPath.length === 0) {
+	        return [];
 	    }
 
-	    var value = jsonPath.substring(1, end);
-	    prop = value === '*' ? value : JSON.parse(value); // parse string and number
-	    remainder = jsonPath.substr(end + 1);
-	  }
-	  else {
-	    throw new SyntaxError('Failed to parse path');
-	  }
+	    // find a match like '.prop'
+	    var match = jsonPath.match(/^\.(\w+)/);
+	    if (match) {
+	        prop = match[1];
+	        remainder = jsonPath.substr(prop.length + 1);
+	    } else if (jsonPath[0] === '[') {
+	        // find a match like
+	        var end = jsonPath.indexOf(']');
+	        if (end === -1) {
+	            throw new SyntaxError('Character ] expected in path');
+	        }
+	        if (end === 1) {
+	            throw new SyntaxError('Index expected after [');
+	        }
 
-	  return [prop].concat(parsePath(remainder))
+	        var value = jsonPath.substring(1, end);
+	        prop = value === '*' ? value : JSON.parse(value); // parse string and number
+	        remainder = jsonPath.substr(end + 1);
+	    } else {
+	        throw new SyntaxError('Failed to parse path');
+	    }
+
+	    return [prop].concat(parsePath(remainder))
 	};
 
 	/**
@@ -2699,27 +2750,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {Object} The error
 	 */
 	exports.improveSchemaError = function (error) {
-	  if (error.keyword === 'enum' && Array.isArray(error.schema)) {
-	    var enums = error.schema;
-	    if (enums) {
-	      enums = enums.map(function (value) {
-	        return JSON.stringify(value);
-	      });
+	    if (error.keyword === 'enum' && Array.isArray(error.schema)) {
+	        var enums = error.schema;
+	        if (enums) {
+	            enums = enums.map(function (value) {
+	                return JSON.stringify(value);
+	            });
 
-	      if (enums.length > 5) {
-	        var more = ['(' + (enums.length - 5) + ' more...)'];
-	        enums = enums.slice(0, 5);
-	        enums.push(more);
-	      }
-	      error.message = 'should be equal to one of: ' + enums.join(', ');
+	            if (enums.length > 5) {
+	                var more = ['(' + (enums.length - 5) + ' more...)'];
+	                enums = enums.slice(0, 5);
+	                enums.push(more);
+	            }
+	            error.message = 'should be equal to one of: ' + enums.join(', ');
+	        }
 	    }
-	  }
 
-	  if (error.keyword === 'additionalProperties') {
-	    error.message = 'should NOT have additional property: ' + error.params.additionalProperty;
-	  }
+	    if (error.keyword === 'additionalProperties') {
+	        error.message = 'should NOT have additional property: ' + error.params.additionalProperty;
+	    }
 
-	  return error;
+	    return error;
 	};
 
 	/**
@@ -2729,11 +2780,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {number} margin
 	 */
 	exports.insideRect = function (parent, child, margin) {
-	  var _margin = margin !== undefined ? margin : 0;
-	  return child.left   - _margin >= parent.left
-	      && child.right  + _margin <= parent.right
-	      && child.top    - _margin >= parent.top
-	      && child.bottom + _margin <= parent.bottom;
+	    var _margin = margin !== undefined ? margin : 0;
+	    return child.left - _margin >= parent.left
+	        && child.right + _margin <= parent.right
+	        && child.top - _margin >= parent.top
+	        && child.bottom + _margin <= parent.bottom;
 	};
 
 	/**
@@ -2751,18 +2802,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {function} Return the debounced function
 	 */
 	exports.debounce = function debounce(func, wait, immediate) {
-	  var timeout;
-	  return function() {
-	    var context = this, args = arguments;
-	    var later = function() {
-	      timeout = null;
-	      if (!immediate) func.apply(context, args);
+	    var timeout;
+	    return function () {
+	        var context = this, args = arguments;
+	        var later = function () {
+	            timeout = null;
+	            if (!immediate) func.apply(context, args);
+	        };
+	        var callNow = immediate && !timeout;
+	        clearTimeout(timeout);
+	        timeout = setTimeout(later, wait);
+	        if (callNow) func.apply(context, args);
 	    };
-	    var callNow = immediate && !timeout;
-	    clearTimeout(timeout);
-	    timeout = setTimeout(later, wait);
-	    if (callNow) func.apply(context, args);
-	  };
 	};
 
 	/**
@@ -2774,25 +2825,70 @@ return /******/ (function(modules) { // webpackBootstrap
 	 *                                        of the changed part in newText.
 	 */
 	exports.textDiff = function textDiff(oldText, newText) {
-	  var len = newText.length;
-	  var start = 0;
-	  var oldEnd = oldText.length;
-	  var newEnd = newText.length;
+	    var len = newText.length;
+	    var start = 0;
+	    var oldEnd = oldText.length;
+	    var newEnd = newText.length;
 
-	  while (newText.charAt(start) === oldText.charAt(start)
-	  && start < len) {
-	    start++;
-	  }
+	    while (newText.charAt(start) === oldText.charAt(start)
+	    && start < len) {
+	        start++;
+	    }
 
-	  while (newText.charAt(newEnd - 1) === oldText.charAt(oldEnd - 1)
-	  && newEnd > start && oldEnd > 0) {
-	    newEnd--;
-	    oldEnd--;
-	  }
+	    while (newText.charAt(newEnd - 1) === oldText.charAt(oldEnd - 1)
+	    && newEnd > start && oldEnd > 0) {
+	        newEnd--;
+	        oldEnd--;
+	    }
 
-	  return {start: start, end: newEnd};
+	    return {start: start, end: newEnd};
 	};
 
+	/**
+	 * Special Parser to detect big numbers and pass it to string or bigint, listening the options provided to the editor
+	 * @param jsonText
+	 * @param options
+	 * @returns {{}}
+	 */
+	exports.parseText = function parseText(jsonText, options) {
+	    let json = {};
+	    try {
+	        if (!options.bigint && !options.forced_types)
+	            json = parse(jsonText);
+	        else {
+	            if (options.bigint && !options.forced_types) {
+	                json = this.parse(jsonText, parseBigIntReviver);
+	            } else {
+	                debugger;
+
+	                json = this.parse(jsonText, function (key, value) {
+	                    let forcedType = options.forced_types[key];
+	                    if (forcedType) {
+	                        try {
+	                            switch (forcedType) {
+	                                case 'string':
+	                                    return String(value);
+	                                case 'number':
+	                                    return Number(value);
+	                                case 'boolean':
+	                                    return Boolean(value);
+	                                case 'date':
+	                                    return Date(value);
+	                                default:
+	                                    return value;
+	                            }
+	                        } catch (e) {
+	                            return value;
+	                        }
+	                    }
+	                    return value;
+	                })
+	            }
+	        }
+	    } catch (e) {
+	    }
+	    return json;
+	};
 
 /***/ },
 /* 5 */
@@ -8146,14 +8242,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	  var json;
 
 	  try {
-	    json = util.parse(text); // this can throw an error
+
+	    json = util.parseText(text,this.options); // this can throw an error
 	  }
 	  catch (err) {
 	    // try to sanitize json, replace JavaScript notation with JSON notation
 	    text = util.sanitize(text);
 
 	    // try to parse again
-	    json = util.parse(text); // this can throw an error
+	    json = util.parse(stext); // this can throw an error
 	  }
 
 	  return json;

@@ -210,7 +210,7 @@ treemode.getText = function() {
  * @param {String} jsonText
  */
 treemode.setText = function(jsonText) {
-  this.set(util.parse(jsonText));
+  this.set(util.parseText(jsonText,this.options));
 };
 
 /**

@@ -43,13 +43,18 @@
   container = document.getElementById('jsoneditor');
 
   options = {
-    mode: 'tree',
+    mode: 'text',
     modes: ['code', 'form', 'text', 'tree', 'view'], // allowed modes
+    "bigint": true,
+    "forced_types":{'advertiserId':'string'},
     onError: function (err) {
       alert(err.toString());
     },
     onChange: function () {
       console.log('change');
+      debugger;
+      console.log(editor.getText());
+      console.log(editor.get());
     },
     indentation: 4,
     escapeUnicode: true
@@ -66,9 +71,10 @@
     "number": 123,
     "object": {"a": "b", "c": "d"},
     "string": "Hello World",
-    "url": "http://jsoneditoronline.org"
+    "url": "http://jsoneditoronline.org",
+    "advertiserId": 23456789879
   };
-
+debugger;
   editor = new JSONEditor(container, options, json);
 
   console.log('json', json);

@@ -17,9 +17,11 @@
     "url": "https://github.com/josdejong/jsoneditor.git"
   },
   "contributors": [
-    {"name":"Emiliano Greco","url":"https://github.com/neogreco"}
-  ]
-  ,
+    {
+      "name": "Emiliano Greco",
+      "url": "https://github.com/neogreco"
+    }
+  ],
   "bugs": "https://github.com/josdejong/jsoneditor/issues",
   "scripts": {
     "build": "gulp",

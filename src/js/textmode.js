@@ -339,14 +339,15 @@ textmode.get = function() {
   var json;
 
   try {
-    json = util.parse(text); // this can throw an error
+
+    json = util.parseText(text,this.options); // this can throw an error
   }
   catch (err) {
     // try to sanitize json, replace JavaScript notation with JSON notation
     text = util.sanitize(text);
 
     // try to parse again
-    json = util.parse(text); // this can throw an error
+    json = util.parse(stext); // this can throw an error
   }
 
   return json;
